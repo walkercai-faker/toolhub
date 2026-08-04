@@ -21,9 +21,12 @@ CREATE TABLE IF NOT EXISTS apps (
   description text,
   icon text,
   color text,
+  category text,
   sort_order integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- 既有資料庫補欄位（冪等；Postgres/PGlite 皆支援 IF NOT EXISTS）
+ALTER TABLE apps ADD COLUMN IF NOT EXISTS category text;
 `;
 
 async function createDb(): Promise<DB> {

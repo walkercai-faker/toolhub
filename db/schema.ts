@@ -18,6 +18,8 @@ export const apps = pgTable("apps", {
   icon: text("icon"),
   // 沒有 icon 時當作漸層底色的 seed（可空）
   color: text("color"),
+  // 分類名稱（可空）；null／空字串代表「未分類」
+  category: text("category"),
   // 排序用，預設用建立順序
   sortOrder: integer("sort_order").notNull().default(0),
   // 建立時間，預設現在

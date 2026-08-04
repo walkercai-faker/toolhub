@@ -1,5 +1,6 @@
 "use client";
 
+// 分類與圖示上傳的底部彈窗表單
 import { useEffect, useRef, useState } from "react";
 import type { App, AppInput } from "@/lib/types";
 import { compressImageToDataUrl } from "@/lib/image";
@@ -9,16 +10,25 @@ import { gradientFor, initialOf } from "@/lib/gradient";
 interface Props {
   mode: "add" | "edit";
   initial?: App | null;
+  existingCategories?: string[];
   onClose: () => void;
   onSubmit: (values: AppInput) => Promise<void>;
   onDelete?: (app: App) => void;
 }
 
-export default function AppSheet({ mode, initial, onClose, onSubmit, onDelete }: Props) {
+export default function AppSheet({
+  mode,
+  initial,
+  existingCategories = [],
+  onClose,
+  onSubmit,
+  onDelete,
+}: Props) {
   const [title, setTitle] = useState(() => initial?.title ?? "");
   const [url, setUrl] = useState(() => initial?.url ?? "");
   const [description, setDescription] = useState(() => initial?.description ?? "");
   const [icon, setIcon] = useState<string | null>(() => initial?.icon ?? null);
+  const [category, setCategory] = useState(() => initial?.category ?? "");
 
   const [errors, setErrors] = useState<{ title?: string; url?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -81,6 +91,7 @@ export default function AppSheet({ mode, initial, onClose, onSubmit, onDelete }:
         description: description.trim(),
         icon,
         color: initial?.color ?? null,
+        category: category.trim() || null,
       });
       requestClose();
     } catch {
@@ -241,6 +252,40 @@ export default function AppSheet({ mode, initial, onClose, onSubmit, onDelete }:
               placeholder="這個工具是做什麼的？（可留空）"
               className="w-full resize-none rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[15px] text-neutral-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-blue-900/40"
             />
+          </div>
+
+          {/* 分類 */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              分類
+            </label>
+            <input
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="例如：人資、客服（可留空）"
+              className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[15px] text-neutral-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-blue-900/40"
+            />
+            {existingCategories.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {existingCategories.map((c) => {
+                  const active = category.trim() === c;
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCategory(c)}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition active:scale-95 ${
+                        active
+                          ? "bg-blue-600 text-white"
+                          : "bg-neutral-200/90 text-neutral-600 dark:bg-white/10 dark:text-neutral-300"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {formError && <p className="text-sm text-red-500">{formError}</p>}

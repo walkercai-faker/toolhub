@@ -41,6 +41,7 @@ export async function PATCH(
   if (body.description !== undefined) patch.description = emptyToNull(body.description);
   if (body.icon !== undefined) patch.icon = emptyToNull(body.icon);
   if (body.color !== undefined) patch.color = emptyToNull(body.color);
+  if (body.category !== undefined) patch.category = emptyToNull(body.category);
   if (body.sortOrder !== undefined) patch.sortOrder = Number(body.sortOrder);
 
   if (Object.keys(patch).length === 0) {

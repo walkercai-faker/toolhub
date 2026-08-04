@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       description: emptyToNull(body.description),
       icon: emptyToNull(body.icon),
       color: emptyToNull(body.color),
+      category: emptyToNull(body.category),
       sortOrder: nextOrder,
     })
     .returning();

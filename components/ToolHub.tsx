@@ -86,6 +86,41 @@ export default function ToolHub() {
     );
   }, [apps, query]);
 
+  // 依分類分組：組內照 sortOrder、組間照各組最小 sortOrder，未分類排最後
+  const groups = useMemo(() => {
+    const map = new Map<string, App[]>();
+    for (const app of filtered) {
+      const key = app.category?.trim() ? app.category.trim() : "";
+      const list = map.get(key);
+      if (list) list.push(app);
+      else map.set(key, [app]);
+    }
+    const result = Array.from(map.entries()).map(([key, list]) => ({
+      key: key === "" ? "__uncategorized__" : key,
+      isUncategorized: key === "",
+      apps: [...list].sort((a, b) => a.sortOrder - b.sortOrder),
+      minOrder: Math.min(...list.map((a) => a.sortOrder)),
+    }));
+    result.sort((a, b) => {
+      if (a.isUncategorized !== b.isUncategorized) return a.isUncategorized ? 1 : -1;
+      return a.minOrder - b.minOrder;
+    });
+    return result;
+  }, [filtered]);
+
+  // 有任何「有分類」的工具時才顯示分類標題（避免只有一個孤零零的「未分類」）
+  const showHeadings = useMemo(() => groups.some((g) => !g.isUncategorized), [groups]);
+
+  // 現有分類清單（去重、去空、排序）供表單快速選取
+  const existingCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const app of apps) {
+      const c = app.category?.trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+  }, [apps]);
+
   // 新增（樂觀更新）
   const handleAdd = useCallback(
     async (values: AppInput) => {
@@ -97,6 +132,7 @@ export default function ToolHub() {
         description: values.description || null,
         icon: values.icon,
         color: values.color,
+        category: values.category ?? null,
         sortOrder: Number.MAX_SAFE_INTEGER,
         createdAt: new Date().toISOString(),
       };
@@ -126,6 +162,7 @@ export default function ToolHub() {
                 description: values.description || null,
                 icon: values.icon,
                 color: values.color,
+                category: values.category ?? null,
               }
             : a,
         ),
@@ -274,17 +311,28 @@ export default function ToolHub() {
                 找不到符合「{query}」的工具
               </p>
             ) : (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-x-3 gap-y-5 px-1">
-                {filtered.map((app, index) => (
-                  <AppIcon
-                    key={app.id}
-                    app={app}
-                    index={index}
-                    editMode={editMode}
-                    onOpenEditor={(a) => setSheet({ mode: "edit", app: a })}
-                    onPeek={(a) => setPeek(a)}
-                    onDelete={handleDelete}
-                  />
+              <div className="space-y-6">
+                {groups.map((group) => (
+                  <section key={group.key}>
+                    {showHeadings && (
+                      <h2 className="mb-3 px-1 text-[22px] font-bold leading-tight text-neutral-900 dark:text-white">
+                        {group.isUncategorized ? "未分類" : group.key}
+                      </h2>
+                    )}
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-x-3 gap-y-5 px-1">
+                      {group.apps.map((app, index) => (
+                        <AppIcon
+                          key={app.id}
+                          app={app}
+                          index={index}
+                          editMode={editMode}
+                          onOpenEditor={(a) => setSheet({ mode: "edit", app: a })}
+                          onPeek={(a) => setPeek(a)}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
             )}
@@ -296,6 +344,7 @@ export default function ToolHub() {
         <AppSheet
           mode={sheet.mode}
           initial={sheet.app}
+          existingCategories={existingCategories}
           onClose={() => setSheet(null)}
           onSubmit={submitSheet}
           onDelete={handleDelete}

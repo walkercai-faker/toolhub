@@ -6,6 +6,7 @@ export interface App {
   description: string | null;
   icon: string | null;
   color: string | null;
+  category: string | null;
   sortOrder: number;
   createdAt: string;
 }
@@ -17,4 +18,5 @@ export interface AppInput {
   description: string;
   icon: string | null;
   color: string | null;
+  category?: string | null;
 }
