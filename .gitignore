@@ -40,6 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local PGlite 資料庫
+# local PGlite 資料庫（含備份／損壞副本）
 /.pgdata
+/.pgdata.*
 /drizzle
