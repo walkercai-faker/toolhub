@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* 原生手機感的 system font stack（含繁中 fallback） */
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
+    "Noto Sans TC", "Microsoft JhengHei", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  color: #1c2230;
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  /* 接近 iOS 桌布的柔和淺色底 */
+  background:
+    radial-gradient(1200px 820px at 12% -8%, #dbeafe 0%, transparent 56%),
+    radial-gradient(1000px 720px at 104% 12%, #fce7f3 0%, transparent 52%),
+    radial-gradient(900px 900px at 50% 118%, #e0f2fe 0%, transparent 55%),
+    linear-gradient(180deg, #f5f7ff 0%, #eef1f8 100%);
+  background-attachment: fixed;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #e9edf5;
+    background:
+      radial-gradient(1200px 820px at 10% -10%, #1e293b 0%, transparent 56%),
+      radial-gradient(1000px 720px at 104% 8%, #322a55 0%, transparent 52%),
+      radial-gradient(900px 900px at 50% 120%, #0c1626 0%, transparent 55%),
+      linear-gradient(180deg, #0b1020 0%, #090912 100%);
+    background-attachment: fixed;
+  }
+}
+
+/* squircle 質感 icon */
+.squircle {
+  border-radius: 22%;
+  overflow: hidden;
+  box-shadow:
+    0 8px 18px -8px rgba(15, 23, 42, 0.42),
+    0 2px 6px -2px rgba(15, 23, 42, 0.22),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  .squircle {
+    box-shadow:
+      0 10px 22px -8px rgba(0, 0, 0, 0.6),
+      0 2px 6px -2px rgba(0, 0, 0, 0.4),
+      inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* 避免長按時跳出系統選單、選字 */
+.no-callout {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* iOS 抖動模式 */
+@keyframes jiggle {
+  0%,
+  100% {
+    transform: rotate(-1.4deg);
+  }
+  50% {
+    transform: rotate(1.4deg);
+  }
+}
+.jiggle {
+  animation: jiggle 0.32s ease-in-out infinite;
+}
+
+/* bottom sheet 從下滑入 */
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-sheet-up {
+  animation: sheet-up 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* peek 預覽小卡彈出 */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-pop-in {
+  animation: pop-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 尊重使用者的減少動態偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .jiggle,
+  .animate-sheet-up,
+  .animate-fade-in,
+  .animate-pop-in {
+    animation: none;
+  }
+}
