@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { App } from "@/lib/types";
@@ -19,6 +19,7 @@ interface Props {
 
 const LONG_PRESS_MS = 450;
 const MOVE_TOLERANCE = 10;
+const DRAG_THRESHOLD = 6;
 
 export default function AppIcon({
   app,
@@ -32,8 +33,9 @@ export default function AppIcon({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressed = useRef(false);
   const start = useRef<{ x: number; y: number } | null>(null);
-  // 記錄 pointerdown 位置，用來判斷「這次 click 其實是拖曳／滑動」，不依賴時序
+  // 以 pointer 事件（可靠座標）判斷這次互動是「拖曳／滑動」還是「純點擊」
   const downPos = useRef<{ x: number; y: number } | null>(null);
+  const movedRef = useRef(false);
 
   // 組內拖曳排序：非編輯模式或搜尋中一律 disabled
   const {
@@ -44,18 +46,6 @@ export default function AppIcon({
     transition,
     isDragging,
   } = useSortable({ id: app.id, disabled: !dndEnabled });
-
-  // 記錄拖曳剛結束的時間，用來吞掉拖曳後殘留的 click（避免誤開編輯表單）
-  const wasDragging = useRef(false);
-  const dragEndAt = useRef(0);
-  useEffect(() => {
-    if (isDragging) {
-      wasDragging.current = true;
-    } else if (wasDragging.current) {
-      wasDragging.current = false;
-      dragEndAt.current = Date.now();
-    }
-  }, [isDragging]);
 
   const clearTimer = () => {
     if (timer.current) {
@@ -84,32 +74,49 @@ export default function AppIcon({
     }
   };
 
+  // 統一手勢：按下記錄起點並重設位移旗標；移動超過門檻即標記為「拖曳」
+  const onPointerDown = (e: React.PointerEvent) => {
+    downPos.current = { x: e.clientX, y: e.clientY };
+    movedRef.current = false;
+    if (dndEnabled) {
+      (listeners as { onPointerDown?: (e: React.PointerEvent) => void })?.onPointerDown?.(e);
+    } else {
+      handlePointerDown(e);
+    }
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = downPos.current;
+    if (
+      d &&
+      (Math.abs(e.clientX - d.x) > DRAG_THRESHOLD ||
+        Math.abs(e.clientY - d.y) > DRAG_THRESHOLD)
+    ) {
+      movedRef.current = true;
+    }
+    if (!dndEnabled) handlePointerMove(e);
+  };
+  const onPointerUpOrLeave = () => {
+    if (!dndEnabled) clearTimer();
+  };
+
   const handleClick = (e: React.MouseEvent) => {
-    // 按下與放開位置差距大 → 這是拖曳／滑動後殘留的 click：一律吞掉（不開連結、不開編輯）
-    const dp = downPos.current;
+    const moved = movedRef.current || isDragging;
+    movedRef.current = false;
     downPos.current = null;
-    if (dp && (Math.abs(e.clientX - dp.x) > 6 || Math.abs(e.clientY - dp.y) > 6)) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-    // 拖曳剛結束殘留的 click（時序保險）：吞掉，避免誤觸
-    if (Date.now() - dragEndAt.current < 250) {
-      e.preventDefault();
-      return;
-    }
-    // 編輯模式：點 icon 開啟編輯表單，不開連結
+
+    // 編輯模式：一律不導航（<a> 也不帶 href）。純點擊開編輯表單，拖曳不動作。
     if (editMode) {
       e.preventDefault();
-      onOpenEditor(app);
+      if (!moved) onOpenEditor(app);
       return;
     }
-    // 剛剛是長按（已彈出 peek）：擋掉這次點擊，不開連結
-    if (longPressed.current) {
+    // 一般模式：拖曳／滑動，或剛長按看過描述 → 擋掉，不開連結
+    if (moved || longPressed.current) {
       e.preventDefault();
       longPressed.current = false;
+      return;
     }
-    // 否則：讓 <a> 預設行為在新分頁開啟
+    // 純點擊 → 讓帶 href 的 <a> 在新分頁開啟
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -120,29 +127,21 @@ export default function AppIcon({
 
   const hasIcon = Boolean(app.icon);
 
-  const recordDownPos = (e: React.PointerEvent) => {
-    downPos.current = { x: e.clientX, y: e.clientY };
-  };
-
-  // 拖曳模式套用 dnd 手勢監聽（並先記錄按下位置）；否則維持原本的長按 peek 手勢
+  // 拖曳模式套用 dnd 監聽；兩種模式都掛統一手勢以記錄位移
   const gestureProps = dndEnabled
     ? {
         ...attributes,
         ...listeners,
-        onPointerDown: (e: React.PointerEvent) => {
-          recordDownPos(e);
-          (listeners as { onPointerDown?: (e: React.PointerEvent) => void })?.onPointerDown?.(e);
-        },
+        onPointerDown,
+        onPointerMove,
+        onPointerUp: onPointerUpOrLeave,
       }
     : {
-        onPointerDown: (e: React.PointerEvent) => {
-          recordDownPos(e);
-          handlePointerDown(e);
-        },
-        onPointerMove: handlePointerMove,
-        onPointerUp: clearTimer,
-        onPointerCancel: clearTimer,
-        onPointerLeave: clearTimer,
+        onPointerDown,
+        onPointerMove,
+        onPointerUp: onPointerUpOrLeave,
+        onPointerCancel: onPointerUpOrLeave,
+        onPointerLeave: onPointerUpOrLeave,
       };
 
   return (
@@ -174,7 +173,8 @@ export default function AppIcon({
       )}
 
       <a
-        href={app.url}
+        // 編輯模式不帶 href → 拖曳／點擊都不可能觸發原生導航
+        href={editMode ? undefined : app.url}
         target="_blank"
         rel="noopener noreferrer"
         draggable={false}
@@ -184,7 +184,7 @@ export default function AppIcon({
         aria-label={app.title}
         className={`squircle no-callout relative block aspect-square w-16 transition-transform duration-100 will-change-transform active:scale-90 ${
           editMode && !isDragging ? "jiggle" : ""
-        } ${dndEnabled ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
+        } ${dndEnabled ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer"}`}
         style={editMode ? { animationDelay: `${(index % 5) * 45}ms` } : undefined}
       >
         {hasIcon ? (
