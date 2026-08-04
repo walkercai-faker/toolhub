@@ -93,14 +93,14 @@ export default function AppSheet({ mode, initial, onClose, onSubmit, onDelete }:
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/30 backdrop-blur-sm transition-opacity duration-200 ${
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 backdrop-blur-sm transition-opacity duration-200 sm:items-center sm:p-6 ${
         closing ? "opacity-0" : "animate-fade-in opacity-100"
       }`}
       onClick={requestClose}
       role="presentation"
     >
       <div
-        className={`w-full max-w-md rounded-t-3xl border-t border-white/50 bg-neutral-50/95 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl backdrop-blur-2xl transition-transform duration-200 dark:border-white/10 dark:bg-neutral-900/95 ${
+        className={`flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border-t border-white/50 bg-neutral-50/95 shadow-2xl backdrop-blur-2xl transition-transform duration-200 dark:border-white/10 dark:bg-neutral-900/95 sm:max-h-[85vh] sm:rounded-3xl sm:border ${
           closing ? "translate-y-full" : "animate-sheet-up"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -108,26 +108,31 @@ export default function AppSheet({ mode, initial, onClose, onSubmit, onDelete }:
         aria-modal="true"
         aria-label={mode === "add" ? "新增工具" : "編輯工具"}
       >
-        {/* 抓握條 */}
-        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+        {/* 標題列（固定不捲動） */}
+        <div className="shrink-0 px-5 pt-3">
+          {/* 抓握條（僅手機顯示） */}
+          <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700 sm:hidden" />
 
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
-            {mode === "add" ? "新增工具" : "編輯工具"}
-          </h2>
-          <button
-            type="button"
-            onClick={requestClose}
-            aria-label="關閉"
-            className="grid h-8 w-8 place-items-center rounded-full bg-neutral-200/80 text-neutral-500 transition active:scale-90 dark:bg-white/10 dark:text-neutral-300"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
+              {mode === "add" ? "新增工具" : "編輯工具"}
+            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="關閉"
+              className="grid h-8 w-8 place-items-center rounded-full bg-neutral-200/80 text-neutral-500 transition active:scale-90 dark:bg-white/10 dark:text-neutral-300"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* 內容區（可捲動，確保送出鈕在任何視窗高度都可觸及） */}
+        <div className="overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
           {/* 圖示上傳 */}
           <div className="flex items-center gap-4">
             <button
@@ -260,7 +265,8 @@ export default function AppSheet({ mode, initial, onClose, onSubmit, onDelete }:
               刪除工具
             </button>
           )}
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );
