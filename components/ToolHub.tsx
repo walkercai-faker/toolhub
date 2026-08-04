@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   PointerSensor,
@@ -60,6 +61,7 @@ async function postApp(values: AppInput): Promise<App> {
 }
 
 export default function ToolHub() {
+  const router = useRouter();
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -379,6 +381,17 @@ export default function ToolHub() {
     [sheet, handleAdd, handleUpdate],
   );
 
+  // 登出：先請 API 清除 cookie，再導回登入頁
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch {
+      // 忽略錯誤，仍導向登入頁
+    }
+    router.push("/login");
+    router.refresh(); // 清掉可能殘留的 RSC 快取
+  }, [router]);
+
   const isEmpty = !loading && apps.length === 0;
 
   return (
@@ -390,6 +403,19 @@ export default function ToolHub() {
             工具箱
           </h1>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLogout}
+              aria-label="登出"
+              title="登出"
+              className="grid h-9 w-9 place-items-center rounded-full bg-white/70 text-neutral-500 shadow-sm transition active:scale-90 hover:bg-white hover:text-neutral-700 dark:bg-white/10 dark:text-neutral-300 dark:hover:bg-white/15"
+            >
+              <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="m16 17 5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+            </button>
             {apps.length > 0 && (
               <button
                 type="button"

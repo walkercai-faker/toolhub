@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# 範本檔可 commit，作為部署對照（實際數值仍放 .env.local / Vercel）
+!.env.example
 
 # vercel
 .vercel
