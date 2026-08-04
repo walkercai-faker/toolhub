@@ -1,12 +1,16 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { App } from "@/lib/types";
 import { gradientFor, initialOf } from "@/lib/gradient";
 
 interface Props {
   app: App;
   editMode: boolean;
+  /** 是否啟用拖曳排序（僅編輯模式且未搜尋時為 true） */
+  dndEnabled: boolean;
   index: number;
   onOpenEditor: (app: App) => void;
   onPeek: (app: App) => void;
@@ -19,6 +23,7 @@ const MOVE_TOLERANCE = 10;
 export default function AppIcon({
   app,
   editMode,
+  dndEnabled,
   index,
   onOpenEditor,
   onPeek,
@@ -27,6 +32,28 @@ export default function AppIcon({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressed = useRef(false);
   const start = useRef<{ x: number; y: number } | null>(null);
+
+  // 組內拖曳排序：非編輯模式或搜尋中一律 disabled
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: app.id, disabled: !dndEnabled });
+
+  // 記錄拖曳剛結束的時間，用來吞掉拖曳後殘留的 click（避免誤開編輯表單）
+  const wasDragging = useRef(false);
+  const dragEndAt = useRef(0);
+  useEffect(() => {
+    if (isDragging) {
+      wasDragging.current = true;
+    } else if (wasDragging.current) {
+      wasDragging.current = false;
+      dragEndAt.current = Date.now();
+    }
+  }, [isDragging]);
 
   const clearTimer = () => {
     if (timer.current) {
@@ -56,6 +83,11 @@ export default function AppIcon({
   };
 
   const handleClick = (e: React.MouseEvent) => {
+    // 拖曳剛結束殘留的 click：吞掉，避免誤觸開啟編輯表單
+    if (Date.now() - dragEndAt.current < 250) {
+      e.preventDefault();
+      return;
+    }
     // 編輯模式：點 icon 開啟編輯表單，不開連結
     if (editMode) {
       e.preventDefault();
@@ -78,8 +110,29 @@ export default function AppIcon({
 
   const hasIcon = Boolean(app.icon);
 
+  // 拖曳模式套用 dnd 手勢監聽；否則維持原本的長按 peek 手勢
+  const gestureProps = dndEnabled
+    ? { ...attributes, ...listeners }
+    : {
+        onPointerDown: handlePointerDown,
+        onPointerMove: handlePointerMove,
+        onPointerUp: clearTimer,
+        onPointerCancel: clearTimer,
+        onPointerLeave: clearTimer,
+      };
+
   return (
-    <div className="relative flex flex-col items-center gap-1.5">
+    <div
+      ref={setNodeRef}
+      style={
+        dndEnabled
+          ? { transform: CSS.Transform.toString(transform), transition }
+          : undefined
+      }
+      className={`relative flex flex-col items-center gap-1.5 ${
+        isDragging ? "z-20 opacity-60" : ""
+      }`}
+    >
       {editMode && (
         <button
           type="button"
@@ -102,16 +155,12 @@ export default function AppIcon({
         rel="noopener noreferrer"
         draggable={false}
         onClick={handleClick}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={clearTimer}
-        onPointerCancel={clearTimer}
-        onPointerLeave={clearTimer}
         onContextMenu={handleContextMenu}
+        {...gestureProps}
         aria-label={app.title}
         className={`squircle no-callout relative block aspect-square w-16 transition-transform duration-100 will-change-transform active:scale-90 ${
-          editMode ? "jiggle" : ""
-        }`}
+          editMode && !isDragging ? "jiggle" : ""
+        } ${dndEnabled ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
         style={editMode ? { animationDelay: `${(index % 5) * 45}ms` } : undefined}
       >
         {hasIcon ? (

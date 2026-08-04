@@ -1,8 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import type { App, AppInput } from "@/lib/types";
-import AppIcon from "./AppIcon";
+import SortableSection from "./SortableSection";
 import AppSheet from "./AppSheet";
 import PeekCard from "./PeekCard";
 import SearchBar from "./SearchBar";
@@ -12,6 +26,21 @@ interface SheetState {
   mode: "add" | "edit";
   app: App | null;
 }
+
+const UNCATEGORIZED_KEY = "__uncategorized__";
+
+/**
+ * 巢狀 sortable 的碰撞偵測：
+ * 拖「分類」時只跟其他分類容器碰撞、拖「app」時只跟 app 碰撞，
+ * 兩層互不干擾，避免拖 app 時誤中分類容器（反之亦然）。
+ */
+const collisionDetection: CollisionDetection = (args) => {
+  const isCategory = String(args.active.id).startsWith("cat:");
+  const containers = args.droppableContainers.filter(
+    (c) => String(c.id).startsWith("cat:") === isCategory,
+  );
+  return closestCenter({ ...args, droppableContainers: containers });
+};
 
 const SAMPLES: Omit<AppInput, "icon" | "color">[] = [
   { title: "Google", url: "https://www.google.com", description: "搜尋引擎" },
@@ -96,7 +125,7 @@ export default function ToolHub() {
       else map.set(key, [app]);
     }
     const result = Array.from(map.entries()).map(([key, list]) => ({
-      key: key === "" ? "__uncategorized__" : key,
+      key: key === "" ? UNCATEGORIZED_KEY : key,
       isUncategorized: key === "",
       apps: [...list].sort((a, b) => a.sortOrder - b.sortOrder),
       minOrder: Math.min(...list.map((a) => a.sortOrder)),
@@ -120,6 +149,130 @@ export default function ToolHub() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "zh-Hant"));
   }, [apps]);
+
+  // 分類拖曳的可排序 id（未分類不參與，永遠釘在最後）
+  const sortableCategoryIds = useMemo(
+    () => groups.filter((g) => !g.isUncategorized).map((g) => `cat:${g.key}`),
+    [groups],
+  );
+
+  // 拖曳排序僅在編輯模式且未搜尋時啟用：
+  // 搜尋會讓分組只含子集，重排會漏掉被過濾的工具而破壞全域順序。
+  const dndEnabled = editMode && query.trim() === "";
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  // 依「攤平後的全域 id 順序」持久化排序：樂觀更新 sortOrder + 呼叫 reorder API
+  const persistOrder = useCallback(
+    (flatIds: string[]) => {
+      const snapshot = apps;
+      const orderIndex = new Map(flatIds.map((id, i) => [id, i] as const));
+      setApps((prev) =>
+        prev.map((a) =>
+          orderIndex.has(a.id) ? { ...a, sortOrder: orderIndex.get(a.id)! } : a,
+        ),
+      );
+      // 尚未寫入 DB 的樂觀新增（temp-）不送 API
+      const ids = flatIds.filter((id) => !id.startsWith("temp-"));
+      void (async () => {
+        try {
+          const res = await fetch("/api/apps/reorder", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ids }),
+          });
+          if (!res.ok) throw new Error();
+        } catch {
+          setApps(snapshot);
+        }
+      })();
+    },
+    [apps],
+  );
+
+  // 分類重新命名（樂觀更新）：把所有該分類的工具 category 改為新名，逐筆 PATCH
+  const handleRenameCategory = useCallback(
+    (oldName: string, newName: string) => {
+      const to = newName.trim();
+      if (!to || to === oldName) return;
+      const targets = apps.filter((a) => (a.category?.trim() ?? "") === oldName);
+      if (targets.length === 0) return;
+
+      const snapshot = apps;
+      setApps((prev) =>
+        prev.map((a) =>
+          (a.category?.trim() ?? "") === oldName ? { ...a, category: to } : a,
+        ),
+      );
+      const persistTargets = targets.filter((a) => !a.id.startsWith("temp-"));
+      void (async () => {
+        try {
+          await Promise.all(
+            persistTargets.map((a) =>
+              fetch(`/api/apps/${a.id}`, {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ category: to }),
+              }).then((r) => {
+                if (!r.ok) throw new Error();
+              }),
+            ),
+          );
+        } catch {
+          setApps(snapshot);
+        }
+      })();
+    },
+    [apps],
+  );
+
+  // 拖曳結束：用 active id 是否為 "cat:" 前綴判斷拖的是分類還是 app
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over) return;
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      if (activeId === overId) return;
+
+      if (activeId.startsWith("cat:")) {
+        // 拖曳分類：重排各組順序，未分類強制釘在最後
+        if (!overId.startsWith("cat:")) return;
+        const currentKeys = groups.map((g) => g.key);
+        const oldIndex = currentKeys.indexOf(activeId.slice(4));
+        const newIndex = currentKeys.indexOf(overId.slice(4));
+        if (oldIndex < 0 || newIndex < 0) return;
+
+        let newKeys = arrayMove(currentKeys, oldIndex, newIndex);
+        const hadUncat = newKeys.includes(UNCATEGORIZED_KEY);
+        newKeys = newKeys.filter((k) => k !== UNCATEGORIZED_KEY);
+        if (hadUncat) newKeys.push(UNCATEGORIZED_KEY);
+
+        const byKey = new Map(groups.map((g) => [g.key, g] as const));
+        const flatIds = newKeys.flatMap(
+          (k) => byKey.get(k)?.apps.map((a) => a.id) ?? [],
+        );
+        persistOrder(flatIds);
+        return;
+      }
+
+      // 拖曳 app：僅支援組內重排（跨分類請用編輯表單改分類）
+      const group = groups.find((g) => g.apps.some((a) => a.id === activeId));
+      if (!group || !group.apps.some((a) => a.id === overId)) return;
+      const ids = group.apps.map((a) => a.id);
+      const oldIndex = ids.indexOf(activeId);
+      const newIndex = ids.indexOf(overId);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const movedIds = arrayMove(ids, oldIndex, newIndex);
+      const flatIds = groups.flatMap((g) =>
+        g.key === group.key ? movedIds : g.apps.map((a) => a.id),
+      );
+      persistOrder(flatIds);
+    },
+    [groups, persistOrder],
+  );
 
   // 新增（樂觀更新）
   const handleAdd = useCallback(
@@ -311,30 +464,32 @@ export default function ToolHub() {
                 找不到符合「{query}」的工具
               </p>
             ) : (
-              <div className="space-y-6">
-                {groups.map((group) => (
-                  <section key={group.key}>
-                    {showHeadings && (
-                      <h2 className="mb-3 px-1 text-[22px] font-bold leading-tight text-neutral-900 dark:text-white">
-                        {group.isUncategorized ? "未分類" : group.key}
-                      </h2>
-                    )}
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-x-3 gap-y-5 px-1">
-                      {group.apps.map((app, index) => (
-                        <AppIcon
-                          key={app.id}
-                          app={app}
-                          index={index}
-                          editMode={editMode}
-                          onOpenEditor={(a) => setSheet({ mode: "edit", app: a })}
-                          onPeek={(a) => setPeek(a)}
-                          onDelete={handleDelete}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={collisionDetection}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={sortableCategoryIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-6">
+                    {groups.map((group) => (
+                      <SortableSection
+                        key={group.key}
+                        group={group}
+                        showHeadings={showHeadings}
+                        editMode={editMode}
+                        dndEnabled={dndEnabled}
+                        onOpenEditor={(a) => setSheet({ mode: "edit", app: a })}
+                        onPeek={(a) => setPeek(a)}
+                        onDelete={handleDelete}
+                        onRenameCategory={handleRenameCategory}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             )}
           </>
         )}
