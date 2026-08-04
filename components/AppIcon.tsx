@@ -32,6 +32,8 @@ export default function AppIcon({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressed = useRef(false);
   const start = useRef<{ x: number; y: number } | null>(null);
+  // 記錄 pointerdown 位置，用來判斷「這次 click 其實是拖曳／滑動」，不依賴時序
+  const downPos = useRef<{ x: number; y: number } | null>(null);
 
   // 組內拖曳排序：非編輯模式或搜尋中一律 disabled
   const {
@@ -83,7 +85,15 @@ export default function AppIcon({
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    // 拖曳剛結束殘留的 click：吞掉，避免誤觸開啟編輯表單
+    // 按下與放開位置差距大 → 這是拖曳／滑動後殘留的 click：一律吞掉（不開連結、不開編輯）
+    const dp = downPos.current;
+    downPos.current = null;
+    if (dp && (Math.abs(e.clientX - dp.x) > 6 || Math.abs(e.clientY - dp.y) > 6)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    // 拖曳剛結束殘留的 click（時序保險）：吞掉，避免誤觸
     if (Date.now() - dragEndAt.current < 250) {
       e.preventDefault();
       return;
@@ -110,11 +120,25 @@ export default function AppIcon({
 
   const hasIcon = Boolean(app.icon);
 
-  // 拖曳模式套用 dnd 手勢監聽；否則維持原本的長按 peek 手勢
+  const recordDownPos = (e: React.PointerEvent) => {
+    downPos.current = { x: e.clientX, y: e.clientY };
+  };
+
+  // 拖曳模式套用 dnd 手勢監聽（並先記錄按下位置）；否則維持原本的長按 peek 手勢
   const gestureProps = dndEnabled
-    ? { ...attributes, ...listeners }
+    ? {
+        ...attributes,
+        ...listeners,
+        onPointerDown: (e: React.PointerEvent) => {
+          recordDownPos(e);
+          (listeners as { onPointerDown?: (e: React.PointerEvent) => void })?.onPointerDown?.(e);
+        },
+      }
     : {
-        onPointerDown: handlePointerDown,
+        onPointerDown: (e: React.PointerEvent) => {
+          recordDownPos(e);
+          handlePointerDown(e);
+        },
         onPointerMove: handlePointerMove,
         onPointerUp: clearTimer,
         onPointerCancel: clearTimer,
