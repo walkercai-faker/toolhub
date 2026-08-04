@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 工具箱（toolhub）
 
-## Getting Started
+貳輪嶼內部工具集平台。把常用的網站與後台收整成一格格 App icon，手機優先、任何尺寸都自適應。
 
-First, run the development server:
+- 點 icon 開連結、長按看說明
+- 依分類分組，分類可重新命名、可拖曳排序
+- 工具可拖曳排序、上傳自訂圖示
+- 整站共用帳密登入
+
+## 開發
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+本機沒設 `DATABASE_URL` 時會自動使用 PGlite，資料存在專案內的 `.pgdata/`（已 gitignore）。
+本機帳密放 `.env.local`（格式見 `.env.example`）。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 環境變數
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 變數 | 說明 |
+|---|---|
+| `DATABASE_URL` | Postgres 連線字串。**未設定時**改用本機 PGlite。Supabase 請用 **Transaction pooler**（host 含 `pooler.supabase.com`、port `6543`）；Direct connection 走 IPv6，Vercel 連不到。 |
+| `APP_USERNAME` | 登入帳號 |
+| `APP_PASSWORD` | 登入密碼 |
+| `AUTH_SECRET` | 簽發登入憑證的隨機字串，用 `openssl rand -base64 32` 產生 |
 
-## Learn More
+登入相關的三個變數只要缺一個，登入一律失敗（避免無密碼裸奔）。
 
-To learn more about Next.js, take a look at the following resources:
+## 部署（Vercel）
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. 在 Vercel 匯入本 repo。
+2. 設定上述四個環境變數。
+3. Deploy。首次請求會自動建立資料表。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 技術
 
-## Deploy on Vercel
+Next.js（App Router）、TypeScript、Tailwind CSS、Drizzle ORM、PGlite / Postgres、@dnd-kit。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+由 貳輪嶼 製作
