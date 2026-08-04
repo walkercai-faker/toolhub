@@ -37,7 +37,9 @@ async function createDb(): Promise<DB> {
       import("postgres"),
     ]);
     const postgres = postgresMod.default;
-    const client = postgres(process.env.DATABASE_URL, { max: 1 });
+    // prepare: false —— 相容 Supabase transaction pooler（pgbouncer，port 6543）；
+    // max: 1 —— serverless 每個實例只開一條連線，避免連線數爆掉。
+    const client = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });
     await client.unsafe(BOOTSTRAP_SQL);
     return drizzle(client, { schema }) as unknown as DB;
   }
