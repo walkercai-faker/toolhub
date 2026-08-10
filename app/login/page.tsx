@@ -1,25 +1,15 @@
 "use client";
 
-// 整站共用密碼登入頁。
-// 本頁在 proxy.ts 的公開清單內，不會被守門攔截。
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+// 登入頁（Supabase Auth）。
+// 靜態站沒有伺服器可驗證，改由瀏覽器直接呼叫 Supabase 的 signInWithPassword，
+// 成功後 session 會存在瀏覽器，首頁的登入守衛（AuthGuard）再據此放行。
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { getSupabase } from "@/lib/supabase";
 
-/**
- * 淨化登入後要導回的目的地：只允許「站內絕對路徑」。
- * 擋掉 //evil.com、/\evil.com、https://... 這類開放重導（open redirect）攻擊。
- */
-function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/")) return "/";
-  if (raw.startsWith("//") || raw.startsWith("/\\")) return "/";
-  return raw;
-}
-
-function LoginForm() {
-  const searchParams = useSearchParams();
-  const next = safeNext(searchParams.get("next"));
-
-  const [username, setUsername] = useState("");
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -29,26 +19,24 @@ function LoginForm() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username, password }),
+      const { error: signInError } = await getSupabase().auth.signInWithPassword({
+        email: email.trim(),
+        password,
       });
-      if (res.ok) {
-        // 成功：整頁導向（而非 SPA 跳頁），確保帶著新 cookie 重新進站
-        window.location.href = next;
-        return; // 維持按鈕 disabled 直到跳轉完成
-      }
-      if (res.status === 401) {
-        setError("帳號或密碼錯誤");
+      if (signInError) {
+        // supabase-js 連不到伺服器時也是回傳 error（不是 throw），
+        // 用 status 區分「帳密錯誤（400/401）」與「連線問題」，避免誤導。
+        const isNetworkIssue =
+          signInError.name === "AuthRetryableFetchError" || !signInError.status;
+        setError(isNetworkIssue ? "連線失敗，請檢查網路後再試" : "帳號或密碼錯誤");
       } else {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        setError(data?.error ?? "登入失敗，請稍後再試");
+        // 成功：導回首頁（維持按鈕 disabled 直到跳轉完成）
+        router.replace("/");
+        return;
       }
-    } catch {
-      setError("連線失敗，請檢查網路後再試");
+    } catch (err) {
+      // 環境變數未設定或網路異常
+      setError(err instanceof Error ? err.message : "連線失敗，請檢查網路後再試");
     }
     setSubmitting(false);
   };
@@ -92,16 +80,16 @@ function LoginForm() {
           <div className="space-y-4">
             <div>
               <label
-                htmlFor="username"
+                htmlFor="email"
                 className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300"
               >
-                帳號
+                帳號（Email）
               </label>
               <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 autoCapitalize="off"
                 autoCorrect="off"
                 autoComplete="username"
@@ -145,14 +133,5 @@ function LoginForm() {
         </form>
       </div>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  // useSearchParams 需要 Suspense 邊界，否則 next build 預渲染會報錯
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
   );
 }

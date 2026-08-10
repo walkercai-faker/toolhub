@@ -17,6 +17,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { App, AppInput } from "@/lib/types";
+import {
+  createApp,
+  deleteApp,
+  listApps,
+  reorderApps,
+  updateApp,
+} from "@/lib/apps-api";
+import { getSupabase } from "@/lib/supabase";
 import SortableSection from "./SortableSection";
 import AppSheet from "./AppSheet";
 import PeekCard from "./PeekCard";
@@ -50,16 +58,6 @@ const SAMPLES: Omit<AppInput, "icon" | "color">[] = [
   { title: "Notion", url: "https://www.notion.so", description: "筆記與文件協作" },
 ];
 
-async function postApp(values: AppInput): Promise<App> {
-  const res = await fetch("/api/apps", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(values),
-  });
-  if (!res.ok) throw new Error("建立失敗");
-  return res.json();
-}
-
 export default function ToolHub() {
   const router = useRouter();
   const [apps, setApps] = useState<App[]>([]);
@@ -73,9 +71,7 @@ export default function ToolHub() {
 
   const loadApps = useCallback(async () => {
     try {
-      const res = await fetch("/api/apps", { cache: "no-store" });
-      if (!res.ok) throw new Error();
-      setApps(await res.json());
+      setApps(await listApps());
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -89,9 +85,7 @@ export default function ToolHub() {
     let active = true;
     void (async () => {
       try {
-        const res = await fetch("/api/apps", { cache: "no-store" });
-        if (!res.ok) throw new Error();
-        const data: App[] = await res.json();
+        const data = await listApps();
         if (active) {
           setApps(data);
           setLoadError(false);
@@ -180,12 +174,7 @@ export default function ToolHub() {
       const ids = flatIds.filter((id) => !id.startsWith("temp-"));
       void (async () => {
         try {
-          const res = await fetch("/api/apps/reorder", {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ ids }),
-          });
-          if (!res.ok) throw new Error();
+          await reorderApps(ids);
         } catch {
           setApps(snapshot);
         }
@@ -212,15 +201,7 @@ export default function ToolHub() {
       void (async () => {
         try {
           await Promise.all(
-            persistTargets.map((a) =>
-              fetch(`/api/apps/${a.id}`, {
-                method: "PATCH",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ category: to }),
-              }).then((r) => {
-                if (!r.ok) throw new Error();
-              }),
-            ),
+            persistTargets.map((a) => updateApp(a.id, { category: to })),
           );
         } catch {
           setApps(snapshot);
@@ -293,7 +274,7 @@ export default function ToolHub() {
       };
       setApps((prev) => [...prev, optimistic]);
       try {
-        const created = await postApp(values);
+        const created = await createApp(values);
         setApps((prev) => prev.map((a) => (a.id === tempId ? created : a)));
       } catch (e) {
         setApps((prev) => prev.filter((a) => a.id !== tempId));
@@ -323,13 +304,7 @@ export default function ToolHub() {
         ),
       );
       try {
-        const res = await fetch(`/api/apps/${id}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(values),
-        });
-        if (!res.ok) throw new Error();
-        const updated: App = await res.json();
+        const updated = await updateApp(id, values);
         setApps((prev) => prev.map((a) => (a.id === id ? updated : a)));
       } catch (e) {
         setApps(snapshot);
@@ -347,8 +322,7 @@ export default function ToolHub() {
       setPeek((p) => (p?.id === app.id ? null : p));
       if (app.id.startsWith("temp-")) return; // 尚未寫入 DB
       try {
-        const res = await fetch(`/api/apps/${app.id}`, { method: "DELETE" });
-        if (!res.ok) throw new Error();
+        await deleteApp(app.id);
       } catch {
         setApps(snapshot);
       }
@@ -360,7 +334,7 @@ export default function ToolHub() {
     setLoadingSamples(true);
     try {
       for (const s of SAMPLES) {
-        const created = await postApp({ ...s, icon: null, color: null });
+        const created = await createApp({ ...s, icon: null, color: null });
         setApps((prev) => [...prev, created]);
       }
     } catch {
@@ -381,15 +355,14 @@ export default function ToolHub() {
     [sheet, handleAdd, handleUpdate],
   );
 
-  // 登出：先請 API 清除 cookie，再導回登入頁
+  // 登出：清掉 Supabase session，再導回登入頁
   const handleLogout = useCallback(async () => {
     try {
-      await fetch("/api/logout", { method: "POST" });
+      await getSupabase().auth.signOut();
     } catch {
       // 忽略錯誤，仍導向登入頁
     }
-    router.push("/login");
-    router.refresh(); // 清掉可能殘留的 RSC 快取
+    router.replace("/login");
   }, [router]);
 
   const isEmpty = !loading && apps.length === 0;
@@ -460,7 +433,7 @@ export default function ToolHub() {
         {loadError && !loading && (
           <div className="mt-16 text-center">
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              載入失敗，請確認伺服器是否啟動。
+              載入失敗，請確認網路連線與 Supabase 設定。
             </p>
             <button
               type="button"

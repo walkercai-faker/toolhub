@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+# 靜態匯出輸出目錄（由 GitHub Actions 重新產生，不進版控）
 /out/
 
 # production
@@ -32,7 +33,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-# 範本檔可 commit，作為部署對照（實際數值仍放 .env.local / Vercel）
+# 範本檔可 commit，作為部署對照（實際數值放 .env.local / GitHub Actions Variables）
 !.env.example
 
 # vercel
@@ -42,7 +43,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local PGlite 資料庫（含備份／損壞副本）
+# 舊架構（PGlite / Drizzle）殘留的本機資料，確認不需要後可自行刪除
 /.pgdata
 /.pgdata.*
 /drizzle

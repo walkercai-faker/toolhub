@@ -1,0 +1,69 @@
+# 部署到 GitHub Pages：push 到 main 就自動 build 並發布 out/ 靜態檔。
+#
+# 事前設定（在 GitHub repo 網頁上做一次即可）：
+#   1. Settings → Pages → Build and deployment → Source 選「GitHub Actions」
+#   2. Settings → Secrets and variables → Actions → Variables 分頁，新增兩個 Repository variables：
+#        NEXT_PUBLIC_SUPABASE_URL        例：https://xxxxxxxx.supabase.co
+#        NEXT_PUBLIC_SUPABASE_ANON_KEY   Supabase 專案的 anon / public key
+#      （用 Variables 而非 Secrets：這兩個值本來就會被內嵌進前端 bundle、可公開，
+#        資料安全靠 Supabase RLS。若你偏好放 Secrets，把下方的 vars. 改成 secrets. 即可。）
+name: 部署到 GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 也可在 Actions 分頁手動執行
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時間只跑一個部署；排隊中的舊任務會被取消，但不中斷進行中的部署
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 建置靜態檔
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取得原始碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安裝相依套件
+        run: npm ci
+
+      - name: 建置（next build → out/）
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: 設定 Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上傳靜態檔
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./out
+
+  deploy:
+    name: 發布
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
